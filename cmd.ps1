@@ -26,6 +26,17 @@ function Read-HostDefault([object]$Prompt, [object]$Default)
 	return $res
 }
 
+Function Remove-InvalidFileNameChars {
+  param(
+    [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+    [String]$Name
+  )
+
+  $invalidChars = [IO.Path]::GetInvalidFileNameChars() -join ''
+  $re = "[{0}]" -f [RegEx]::Escape($invalidChars)
+  return ($Name -replace $re)
+}
+
 #param ($src, $out, $tm, $vrate)
  
 $src = ""
@@ -46,12 +57,12 @@ while ( "$opt" -ne "q" )
 		$src = Get-Clipboard 
 		echo $src
 		
-		$out = youtube-dl -s --encoding utf-16 --get-title $src 
-		#$out = "$out.webm" 
+		$out = $(youtube-dl -s --encoding utf-16 --get-title $src)
+		$out = Remove-InvalidFileNameChars $out
 		
 		$tm = $(youtube-dl -s --get-duration $src)
 		$tm = "0:00 $tm"
-		#$t = $tm -split ' '
+		#$t = $tm -split ' '		
 		
 		$urls = $(youtube-dl -g -f bestvideo+bestaudio $src)
 		$url = $urls -split ' '
@@ -60,15 +71,16 @@ while ( "$opt" -ne "q" )
 		$mv = $(ffmpeg -ss 0:00 -to 0:10 -i $url[1] -vn -af volumedetect -f null NULL 2>&1)				# ffmpeg get volume
 		$mv = echo $mv | select-string "mean_volume"													# find  'mean_volume' value(dB)
 		$mv = ($mv -split ': ')[1]
-		$mv = ($mv -split ' ')[0]
-		echo $mv
+		$mv = ($mv -split ' ')[0]				
 		$db = [float]::Parse($mv)
-		$db = -$db * 0.5																				# tweak volume somehow
+		$db = -$db * 0.5																				# tweak volume somehow		
+		
 		$opt = "t"
 	}
 	
 	# PRINT MENU KEYS AND VARIABlES
 	clear		
+	
 	echo "[s] Input: $src"
 	echo "[d] Output: $out"
 	echo "[c] Codec: $ccd"
@@ -99,7 +111,7 @@ while ( "$opt" -ne "q" )
 				
 		ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libx264 -preset ultrafast -vf "scale=-2:$scl" -af "volume= $db dB" "$out.mp4";
 		start "$out.mp4"
-		#pause
+		pause
 	}
 	
 	# ENCODE FINAL
@@ -108,15 +120,15 @@ while ( "$opt" -ne "q" )
 		
 		if ( "$ccd" -eq "libvpx-vp9"){
 	
-			ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libvpx-vp9 -b:v $vr -vf "scale=-2:$scl" -an -f webm -pass 1 NULL;
-			ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libvpx-vp9 -b:v $vr -vf "scale=-2:$scl" -af "volume= $db dB" -pass 2 "$out.webm";
-			start "$out.webm"
+			ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libvpx-vp9 -b:v $vr -vf "scale=-2:$scl" -af "volume=$dbdB" -pass 1 -f null NULL;			
+			ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libvpx-vp9 -b:v $vr -vf "scale=-2:$scl" -af "volume=$dbdB" -pass 2 "`"$out.webm`"";
+			start "`"$out.webm`"";
 		}
 		else
 		{
-			ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libx264 -preset veryslow -vf "scale=-2:$scl" -an -f mp4 -pass 1 NULL;
-			ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libx264 -preset veryslow -vf "scale=-2:$scl" -c:a aac -b:a 128k -af "volume= $db dB" "$out.mp4";
-			start "$out.mp4"
+			ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libx264 -b:v $vr -vf "scale=-2:$scl" -af "volume=$dbdB" -pass 1 -f null NULL 
+			ffmpeg -y -ss $t[0] -to $t[1] -i $url[0] -ss $t[0] -to $t[1] -i $url[1] -c:v libx264 -b:v $vr -vf "scale=-2:$scl" -af "volume=$dbdB" -pass 2 "`"$out.mp4`""
+			start "`"$out.mp4`"";
 		}
 		#pause
 	}
